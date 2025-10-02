@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BlockNote Editor (Import/Export)</title>
+    <meta name="description" content="Client-side BlockNote editor with Import/Export and localStorage autosave." />
+    <link rel="icon" href="/favicon.ico" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --maxw: 1100px;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      }
+      header {
+        position: sticky;
+        top: 0;
+        backdrop-filter: blur(6px);
+        background: color-mix(in oklab, Canvas, CanvasText 5%);
+        border-bottom: 1px solid color-mix(in oklab, CanvasText, transparent 85%);
+        z-index: 10;
+      }
+      .wrap {
+        max-width: var(--maxw);
+        margin: 0 auto;
+        padding: 12px 16px;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .row input[type="text"] {
+        min-width: 240px;
+        padding: 6px 10px;
+        font-size: 14px;
+      }
+      main.wrap { padding-top: 12px; }
+      .tips {
+        color: color-mix(in oklab, CanvasText, transparent 30%);
+        font-size: 12px;
+      }
+      /* Scope our button styles only to our top control row */
+      .row button {
+        padding: 8px 10px;
+        font-size: 14px;
+        border-radius: 6px;
+        border: 1px solid color-mix(in oklab, CanvasText, transparent 80%);
+        background: color-mix(in oklab, Canvas, CanvasText 3%);
+        cursor: pointer;
+      }
+      .row button.primary {
+        background: color-mix(in oklab, Canvas, CanvasText 7%);
+      }
+      .spacer { flex: 1 1 auto; }
+      .editor {
+        border-top: 1px solid color-mix(in oklab, CanvasText, transparent 90%);
+        padding-top: 8px;
+      }
+      .footer {
+        border-top: 1px dashed color-mix(in oklab, CanvasText, transparent 85%);
+        margin-top: 16px;
+        padding-top: 8px;
+        font-size: 12px;
+        color: color-mix(in oklab, CanvasText, transparent 30%);
+      }
+      /* Ensure resize handles sit above any custom overlays */
+      .bn-visual-media-wrapper { position: relative; }
+      .bn-annot-overlay { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+      .bn-resize-handle { position: absolute; z-index: 1000; width: 12px !important; height: 48px !important; background-color: #ff7a00 !important; border-color: white !important; opacity: 0.9; }
+
+      /* On-screen PDF width preview */
+      body.pdf-preview .wrap { max-width: none !important; }
+      body.pdf-preview .bn-container { max-width: none !important; width: var(--pdf-preview-width, 7.27in) !important; margin: 0 auto; }
+      body.pdf-preview .bn-editor { width: 100% !important; }
+
+      /* Print-exact styles */
+      @page { size: A4; margin: 0.65in 0.5in 0.5in; }
+      @media print {
+        :root { color-scheme: light; }
+        body { margin: 0; }
+        header, .row, .tips, .footer { display: none !important; }
+        .wrap { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+        .bn-resize-handle, .bn-convert-btn { display: none !important; }
+        .bn-container {
+          max-width: none !important;
+          width: 7.27in !important; /* A4 content width for 0.65in top, 0.5in sides */
+          margin: 0 auto;
+        }
+        .bn-editor { width: 100% !important; }
+        /* Ensure images behave well with container padding and avoid awkward splits */
+        .bn-visual-media-wrapper { page-break-inside: avoid; break-inside: avoid; }
+        img.bn-visual-media { display: block; max-width: 100% !important; height: auto !important; }
+        
+      }
+      /* Optional class to tweak when entering print mode */
+      body.print-exact .wrap { max-width: none; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap row">
+        <strong>BlockNote Editor</strong>
+        <span class="tips">Client-side • Import/Export • Autosave</span>
+        <span class="spacer"></span>
+        <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      </div>
+    </header>
+    <main id="root" class="wrap"></main>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
