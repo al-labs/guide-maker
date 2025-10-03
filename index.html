@@ -23,6 +23,29 @@
         border-bottom: 1px solid color-mix(in oklab, CanvasText, transparent 85%);
         z-index: 10;
       }
+      .header-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .header-brand {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: 18px;
+        flex: 0 0 auto;
+      }
+      .header-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        flex: 1 1 auto;
+        justify-content: flex-end;
+      }
       .wrap {
         max-width: var(--maxw);
         margin: 0 auto;
@@ -39,13 +62,13 @@
         padding: 6px 10px;
         font-size: 14px;
       }
-      main.wrap { padding-top: 12px; }
+      main .wrap { padding-top: 12px; }
       .tips {
         color: color-mix(in oklab, CanvasText, transparent 30%);
         font-size: 12px;
       }
       /* Scope our button styles only to our top control row */
-      .row button {
+      .row button, .row .mantine-Menu-target > button {
         padding: 8px 10px;
         font-size: 14px;
         border-radius: 6px;
@@ -53,8 +76,22 @@
         background: color-mix(in oklab, Canvas, CanvasText 3%);
         cursor: pointer;
       }
-      .row button.primary {
+      .row button.primary, .row .mantine-Menu-target > button.primary {
         background: color-mix(in oklab, Canvas, CanvasText 7%);
+      }
+      .control-row {
+        justify-content: flex-end;
+        flex: 1 1 auto;
+      }
+      .control-row label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        white-space: nowrap;
+      }
+      .control-row input[type="text"] {
+        min-width: 200px;
       }
       .spacer { flex: 1 1 auto; }
       .editor {
@@ -102,15 +139,7 @@
     </style>
   </head>
   <body>
-    <header>
-      <div class="wrap row">
-        <strong>BlockNote Editor</strong>
-        <span class="tips">Client-side • Import/Export • Autosave</span>
-        <span class="spacer"></span>
-        <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
-      </div>
-    </header>
-    <main id="root" class="wrap"></main>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

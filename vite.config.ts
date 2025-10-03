@@ -7,8 +7,7 @@ export default defineConfig({
   base: './',
   optimizeDeps: {
     include: [
-      '@react-pdf/renderer',
-      '@blocknote/xl-pdf-exporter',
+      '@mantine/core',
       'base64-js',
       'unicode-properties',
     ],

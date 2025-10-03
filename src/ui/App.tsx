@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { Menu } from '@mantine/core';
 import { Buffer as BufferPolyfill } from 'buffer';
 // Static imports to avoid dev-time dynamic import issues
-import { PDFExporter, pdfDefaultSchemaMappings } from '@blocknote/xl-pdf-exporter';
-import { Text, View, Image as PDFImage, Svg, Line, Path, pdf as pdfRenderer, Font } from '@react-pdf/renderer';
 import { BlockNoteView } from '@blocknote/mantine';
 import {
   useCreateBlockNote,
@@ -59,7 +58,7 @@ export default function App() {
   const [pdfPreview, setPdfPreview] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const suppressChangeRef = useRef<boolean>(false);
-  
+
 
   // Enable multi‑column blocks by extending the schema,
   // and use the multi‑column drop cursor.
@@ -292,214 +291,6 @@ export default function App() {
       setDirty(false);
       return;
     }
-    if (fmt === 'pdf') {
-
-      // In some cases, users resize images in the editor but the JSON
-      // doesn't yet have previewWidth. As a fallback, read the current
-      // rendered width from the editor DOM and inject it into a shallow
-      // copy of the document for export.
-      const withMeasuredImageWidths = (blocks: any[]): any[] => {
-        const map = (arr: any[]): any[] => arr.map((b) => {
-          let next = b;
-          if (b?.type === 'image' || b?.type === 'annotated_image') {
-            const img = document.querySelector(`div[data-id="${b.id}"] img.bn-visual-media`) as HTMLImageElement | null;
-            if (img) {
-              const measured = Math.max(1, Math.round(img.getBoundingClientRect().width));
-              next = { ...b, props: { ...b.props, previewWidth: measured } };
-            }
-          }
-          if (b?.children?.length) {
-            next = { ...next, children: map(b.children) };
-          }
-          return next;
-        });
-        return map(blocks);
-      };
-
-      const docForPdf = withMeasuredImageWidths(editor.document as any);
-      // Compute a scale factor so that an image that is X px wide in the editor
-      // becomes X * scale in the PDF, where scale maps the editor content width
-      // to the PDF content width. This preserves relative sizing.
-      const PIXELS_PER_POINT = 0.75;
-      const A4_WIDTH_PT = 595.28;
-      const pagePadHPt = (pdfDefaultSchemaMappings as any) ? ((new PDFExporter(editor.schema as any, pdfDefaultSchemaMappings) as any).styles?.page?.paddingHorizontal ?? 35) : 35;
-      const pdfMaxWidthPt = A4_WIDTH_PT - 2 * pagePadHPt;
-      const pdfMaxWidthPx = pdfMaxWidthPt / PIXELS_PER_POINT;
-      const editorHost = (editor as any)?.domElement as HTMLElement | null;
-      const editorContentEl = (editorHost?.firstElementChild || null) as HTMLElement | null;
-      const editorWidthPx = editorContentEl?.clientWidth ?? editorHost?.clientWidth ?? document.body.clientWidth ?? 800;
-      const pdfScalePx = Math.min(1, pdfMaxWidthPx / editorWidthPx);
-      // Extend default mappings with an alert block mapping
-      // Scale down font sizes to match editor density better
-      const fontScale = 0.85; // Reduce by 15% to fit more content per page
-      const pdfMappings = {
-        blockMapping: {
-          ...pdfDefaultSchemaMappings.blockMapping,
-          alert: (block: any, _t: any) => {
-            const color = ({info:'#0d6efd',success:'#198754',warning:'#ffc107',danger:'#dc3545'} as any)[block.props.variant || 'info'];
-            return (
-              <View key={'alert'+block.id} style={{ borderLeftColor: color, borderLeftWidth: 3, paddingLeft: 8, paddingVertical: 6 }}>
-                <Text>{_t.transformInlineContent(block.content)}</Text>
-              </View>
-            ) as any;
-          },
-          image: async (block: any, t: any) => {
-            const pagePadH = (t.styles?.page?.paddingHorizontal ?? 35) * 1;
-            const maxWidth = A4_WIDTH_PT - 2 * pagePadH;
-            const desiredPx = block.props.previewWidth || null;
-            const isFull = desiredPx ? (desiredPx >= editorWidthPx - 2) : false;
-            const targetPx = isFull ? (maxWidth / PIXELS_PER_POINT) : (desiredPx ? desiredPx * pdfScalePx : (maxWidth / PIXELS_PER_POINT));
-            const widthPt = Math.min(targetPx * PIXELS_PER_POINT, maxWidth);
-            const actualWidth = widthPt;
-            return (
-              <View wrap={false} key={'image'+block.id}>
-                <PDFImage src={await t.resolveFile(block.props.url)} style={{ width: actualWidth }} />
-                {(() => {
-                  const cap = block.props.caption as string | undefined;
-                  return cap ? <Text style={{ fontSize: 10 }}>{cap}</Text> : null;
-                })()}
-              </View>
-            ) as any;
-          },
-          annotated_image: async (block: any, t: any) => {
-            const pagePadH = (t.styles?.page?.paddingHorizontal ?? 35) * 1;
-            const maxWidth = A4_WIDTH_PT - 2 * pagePadH;
-            const desiredPx = block.props.previewWidth || null;
-            const isFull = desiredPx ? (desiredPx >= editorWidthPx - 2) : false;
-            const targetPx = isFull ? (maxWidth / PIXELS_PER_POINT) : (desiredPx ? desiredPx * pdfScalePx : (maxWidth / PIXELS_PER_POINT));
-            const widthPt = Math.min(targetPx * PIXELS_PER_POINT, maxWidth);
-            const src = await t.resolveFile(block.props.url);
-            // Determine aspect ratio by loading image in browser
-            const { w: naturalW, h: naturalH } = await (async () => {
-              return await new Promise<{ w: number; h: number }>((resolve, reject) => {
-                const img = new Image();
-                img.onload = () => resolve({ w: (img as any).naturalWidth || (img as any).width, h: (img as any).naturalHeight || (img as any).height });
-                img.onerror = () => resolve({ w: 1, h: 1 });
-                img.src = src as any;
-              });
-            })();
-            const heightPt = Math.max(1, widthPt * (naturalH / naturalW));
-            // Parse annotations
-            let annotations: any[] = [];
-            try { annotations = JSON.parse(block.props.annotations || '[]'); } catch {}
-            const lines = (annotations || []).filter((a) => a?.type === 'arrow');
-            const dots = (annotations || []).filter((a) => a?.type === 'dot');
-            return (
-              <View wrap={false} key={'annotated_image'+block.id}>
-                <View style={{ position: 'relative', width: widthPt }}>
-                  <PDFImage src={src as any} style={{ width: widthPt }} />
-                  <Svg width={widthPt} height={heightPt} style={{ position: 'absolute', left: 0, top: 0 }}>
-                    {lines.map((a) => {
-                      const x1 = (a.x || 0) * widthPt, y1 = (a.y || 0) * heightPt;
-                      const x2 = (a.x2 || 0) * widthPt, y2 = (a.y2 || 0) * heightPt;
-                      // arrow head as two short lines at the end
-                      const angle = Math.atan2((y2 - y1), (x2 - x1));
-                      const headLen = 8; // points
-                      const leftAng = angle - Math.PI / 6;
-                      const rightAng = angle + Math.PI / 6;
-                      const lx = x2 - headLen * Math.cos(leftAng);
-                      const ly = y2 - headLen * Math.sin(leftAng);
-                      const rx = x2 - headLen * Math.cos(rightAng);
-                      const ry = y2 - headLen * Math.sin(rightAng);
-                      return (
-                        <React.Fragment key={a.id}>
-                          <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#ff7a00" strokeWidth={3} />
-                          <Line x1={x2} y1={y2} x2={lx} y2={ly} stroke="#ff7a00" strokeWidth={3} />
-                          <Line x1={x2} y1={y2} x2={rx} y2={ry} stroke="#ff7a00" strokeWidth={3} />
-                        </React.Fragment>
-                      );
-                    })}
-                    {dots.map((a) => {
-                      const cx = (a.x || 0) * widthPt, cy = (a.y || 0) * heightPt;
-                      const r = 5;
-                      const d = `M ${cx + r},${cy} A ${r},${r} 0 1 0 ${cx - r},${cy} A ${r},${r} 0 1 0 ${cx + r},${cy}`;
-                      return <Path key={a.id} d={d} fill="#ff7a00" />;
-                    })}
-                  </Svg>
-                </View>
-                {(() => {
-                  const cap = block.props.caption as string | undefined;
-                  return cap ? <Text style={{ fontSize: 10 }}>{cap}</Text> : null;
-                })()}
-              </View>
-            ) as any;
-          },
-        },
-        inlineContentMapping: pdfDefaultSchemaMappings.inlineContentMapping,
-        styleMapping: {
-          ...pdfDefaultSchemaMappings.styleMapping,
-          // Override text styles to reduce font sizes
-          text: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.text || {}),
-            fontSize: 12 * fontScale,
-          },
-          h1: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.h1 || {}),
-            fontSize: 24 * fontScale,
-            marginTop: 8 * fontScale,
-            marginBottom: 6 * fontScale,
-          },
-          h2: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.h2 || {}),
-            fontSize: 20 * fontScale,
-            marginTop: 7 * fontScale,
-            marginBottom: 5 * fontScale,
-          },
-          h3: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.h3 || {}),
-            fontSize: 16 * fontScale,
-            marginTop: 6 * fontScale,
-            marginBottom: 4 * fontScale,
-          },
-          paragraph: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.paragraph || {}),
-            fontSize: 12 * fontScale,
-            marginBottom: 4 * fontScale,
-          },
-          list: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.list || {}),
-            fontSize: 12 * fontScale,
-            marginBottom: 4 * fontScale,
-          },
-          listItem: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.listItem || {}),
-            fontSize: 12 * fontScale,
-            marginBottom: 2 * fontScale,
-          },
-          code: {
-            ...((pdfDefaultSchemaMappings.styleMapping as any)?.code || {}),
-            fontSize: 10 * fontScale,
-          },
-        },
-      } as any;
-      // Provide a conservative hyphenation callback to avoid overflow on extremely long words
-      try {
-        Font.registerHyphenationCallback((word: string) => {
-          if (!word) return [word];
-          // If the word already has hyphens or is small, leave it
-          if (word.length <= 18 || /[-\u00AD]/.test(word)) return [word];
-          // Otherwise break into chunks of ~12 characters to allow wrapping
-          const size = 12;
-          const parts: string[] = [];
-          for (let i = 0; i < word.length; i += size) parts.push(word.slice(i, i + size));
-          return parts;
-        });
-      } catch {}
-
-      const exporter = new PDFExporter(editor.schema as any, pdfMappings, {
-        // Avoid using the default BlockNote CORS proxy; keep data URLs inline,
-        // and leave http(s) URLs unchanged (may fail if remote blocks CORS).
-        resolveFileUrl: async (url: string) => url,
-      } as any);
-      // Keep default margins to maximize content width parity with editor
-      const pdfDoc = await exporter.toReactPDFDocument(docForPdf as any);
-      // In browser, render to Blob and download
-      const instance = pdfRenderer(pdfDoc as any);
-      const blob = await instance.toBlob();
-      download(base + '.pdf', 'application/pdf', blob);
-      setDirty(false);
-      return;
-    }
   };
 
   const onPrintExact = () => {
@@ -517,77 +308,98 @@ export default function App() {
     setDirty(false);
   };
 
+  const controls = (
+    <div className="row control-row">
+      <label>
+        File name:&nbsp;
+        <input
+          type="text"
+          value={fileName}
+          onChange={(e) => setFileName(e.target.value)}
+          placeholder="enter-title-here"
+        />
+      </label>
+      <button onClick={onNew} title="Start a new, empty document">New</button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onImportJSON(f);
+          e.currentTarget.value = '';
+        }}
+      />
+      <button onClick={triggerImport}>Import JSON</button>
+      <Menu withinPortal>
+        <Menu.Target>
+          <button className="primary" type="button">Export</button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item onClick={() => onExport('json')}>Export JSON</Menu.Item>
+          <Menu.Item onClick={() => onExport('html')}>Export HTML</Menu.Item>
+          <Menu.Item onClick={() => onExport('mdx')}>Export MDX</Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      <button onClick={onPrintExact} title="Use your browser's print-to-PDF for exact layout">Print PDF (Exact)</button>
+      <button onClick={() => setPdfPreview(p => !p)} title="Constrain editor to printable width">
+        {pdfPreview ? 'Preview Width: On' : 'Preview Width: Off'}
+      </button>
+      <button onClick={clearLocal} title="Remove the autosaved local draft">Clear Local Draft</button>
+    </div>
+  );
+
   return (
     <div>
-      <div className="row" style={{gap: 8, margin: '12px 0'}}>
-        <label>
-          File name:&nbsp;
-          <input
-            type="text"
-            value={fileName}
-            onChange={(e) => setFileName(e.target.value)}
-            placeholder="enter-title-here"
-          />
-        </label>
-        <button onClick={onNew} title="Start a new, empty document">New</button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onImportJSON(f);
-            e.currentTarget.value = '';
-          }}
-        />
-        <button onClick={triggerImport}>Import JSON</button>
-      <span className="spacer" />
-        
-        <button className="primary" onClick={() => onExport('json')}>Export JSON</button>
-        <button onClick={() => onExport('html')}>Export HTML</button>
-        <button onClick={() => onExport('mdx')}>Export MDX</button>
-        <button onClick={() => onExport('pdf')}>Export PDF</button>
-        <button onClick={onPrintExact} title="Use your browser's print-to-PDF for exact layout">Print PDF (Exact)</button>
-        <button onClick={() => setPdfPreview(p => !p)} title="Constrain editor to printable width">
-          {pdfPreview ? 'Preview Width: On' : 'Preview Width: Off'}
-        </button>
-        <button onClick={clearLocal} title="Remove the autosaved local draft">Clear Local Draft</button>
-      </div>
+      <header>
+        <div className="wrap header-bar">
+          <div className="header-brand">
+            <strong>Editor</strong>
+          </div>
+          <div className="header-controls">
+            {controls}
+          </div>
+        </div>
+      </header>
 
-      <div className="tips" style={{marginBottom: 8}}>
-        Tip: we autosave to your browser’s local storage. Export JSON/HTML/MDX to publish or share.
-      </div>
+      <main>
+        <div className="wrap main-wrap">
+          <div className="tips" style={{marginBottom: 8}}>
+            Tip: we autosave to your browser’s local storage. Export JSON/HTML/MDX to publish or share.
+          </div>
 
-      <div className="editor">
-        <BlockNoteView
-          editor={editor}
-          slashMenu={false}
-          onChange={() => {
-            if (suppressChangeRef.current) {
-              suppressChangeRef.current = false;
-            } else {
-              try {
-                const json = JSON.stringify(editor.document);
-                localStorage.setItem(DRAFT_KEY, json);
-                localStorage.setItem(NAME_KEY, fileName);
-              } catch {}
-              setDirty(true);
-            }
-          }}
-        >
-          <SuggestionMenuController
-            triggerCharacter="/"
-            getItems={getSlashMenuItems}
-          />
-        </BlockNoteView>
-      </div>
+          <div className="editor">
+            <BlockNoteView
+              editor={editor}
+              slashMenu={false}
+              onChange={() => {
+                if (suppressChangeRef.current) {
+                  suppressChangeRef.current = false;
+                } else {
+                  try {
+                    const json = JSON.stringify(editor.document);
+                    localStorage.setItem(DRAFT_KEY, json);
+                    localStorage.setItem(NAME_KEY, fileName);
+                  } catch {}
+                  setDirty(true);
+                }
+              }}
+            >
+              <SuggestionMenuController
+                triggerCharacter="/"
+                getItems={getSlashMenuItems}
+              />
+            </BlockNoteView>
+          </div>
 
-      <div className="footer">
-        <p>
-          This is a client‑side editor. Nothing is uploaded until you export and commit files to your docs repo.
-        </p>
-      </div>
+          <div className="footer">
+            <p>
+              This is a client‑side editor. Nothing is uploaded until you export and commit files to your docs repo.
+            </p>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
